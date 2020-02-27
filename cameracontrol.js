@@ -5,7 +5,12 @@ import { RNCamera } from 'react-native-camera';
 
 
 export default class Cameraccess extends PureComponent {
+
+
+
+ 
   render() {
+  
     return (
       <View style={styles.container}>
         <RNCamera
@@ -39,6 +44,9 @@ export default class Cameraccess extends PureComponent {
       </View>
     );
   }
+
+
+
 
   takePicture = async() => {
     if (this.camera) {

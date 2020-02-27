@@ -14,7 +14,6 @@
     "react-native": "0.61.5",
     "react-native-bluetooth-serial": "^1.0.0-rc1",
     "react-native-camera": "^3.18.0",
-    "react-native-camera-roll": "0.0.29",
     "react-native-tiny-toast": "^1.0.6"
   },
   "devDependencies": {

@@ -59,6 +59,8 @@ export default class App extends Component{
 
   constructor (props) {
     super(props)
+
+    this.read = this.read.bind(this);
     this.state = {
       isEnabled: false,
       discovering: false,
@@ -78,6 +80,7 @@ export default class App extends Component{
   }
 
   UNSAFE_componentWillMount () {
+    BluetoothSerial.withDelimiter('\r').then(() => {
     Promise.all([
       BluetoothSerial.isEnabled(),
       BluetoothSerial.list()
@@ -89,6 +92,13 @@ export default class App extends Component{
 
     BluetoothSerial.on('bluetoothEnabled', () => console.log('Bluetooth enabled'))
     BluetoothSerial.on('bluetoothDisabled', () => console.log('Bluetooth disabled'))
+    BluetoothSerial.on('read', (data) => {
+      this.setState()
+      console.log('DSata Received from LINUX',data.data);
+      // this.read();
+      // console.log(`DATA FROM BLUETOOTH: ${data.data}`);
+      // Toast.show(data.data);
+   })
     BluetoothSerial.on('error', (err) => console.log(`Error: ${err.message}`))
     BluetoothSerial.on('connectionLost', () => {
       if (this.state.device) {
@@ -96,7 +106,12 @@ export default class App extends Component{
       }
       this.setState({ connected: false })
     })
+  });
+
+ 
   }
+
+ 
 
   /**
    * [android]
@@ -247,11 +262,21 @@ export default class App extends Component{
     BluetoothSerial.write(message)
     .then((res) => {
       console.log('this is ',res)
-      Toast.show('Successfuly wrote to device')
+      //Toast.show('Successfuly wrote to device')
       this.setState({ connected: true })
+    }).then((data)=>{
+      BluetoothSerial.readFromDevice().then((data) => {
+        Toast.show(data)
+        console.log(data)});
     })
     .catch((err) => Toast.show(err.message))
   }
+
+//   BluetoothSerial.withDelimiter('\r\n').then((res)=>{
+//     BluetoothSerial.on('read', (data) => {
+//         console.log('Reading data: ', data)
+//     })
+// });
 
   onDevicePress (device) {
     console.log(device)
@@ -280,10 +305,17 @@ export default class App extends Component{
     })
   }
 
+  read(){
+    BluetoothSerial.readFromDevice().then((data) => {
+      console.log(data)
+      return data;
+    });
+  }
+
   render(){
 
     if(this.state.val){
-      return <Cameraccess />
+      return <Cameraccess read_command = {this.read} />
     }
     else{
         const activeTabStyle = { borderBottomWidth: 6, borderColor: '#009688' }
