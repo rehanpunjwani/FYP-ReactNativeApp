@@ -1,4 +1,5 @@
 import React, { Component, Fragment } from 'react';
+import { RNCamera } from 'react-native-camera';
 
 
 import {
@@ -14,7 +15,8 @@ import {
   View,
   Modal,
   ActivityIndicator,
-  Image
+  Image,
+  CameraRoll
 } from 'react-native'
 import BluetoothSerial from 'react-native-bluetooth-serial'
 import Toast from 'react-native-tiny-toast'
@@ -93,7 +95,9 @@ export default class App extends Component{
     BluetoothSerial.on('bluetoothEnabled', () => console.log('Bluetooth enabled'))
     BluetoothSerial.on('bluetoothDisabled', () => console.log('Bluetooth disabled'))
     BluetoothSerial.on('read', (data) => {
-      this.setState()
+       if(this.state.val){
+         this.takePicture();
+       }
       console.log('DSata Received from LINUX',data.data);
       // this.read();
       // console.log(`DATA FROM BLUETOOTH: ${data.data}`);
@@ -312,11 +316,55 @@ export default class App extends Component{
     });
   }
 
+  takePicture = async() => {
+    if (this.camera) {
+      const options = { quality: 0.5 };
+      const data = await this.camera.takePictureAsync(options);
+      console.log('taken picture: ',data.uri);
+      CameraRoll.saveToCameraRoll(data.uri)
+      // CameraRoll.saveToCameraRoll(data.uri).then((res,err)=>{
+      //   if(!err){
+      //     console.log('picture has been saved ', res)
+      //   }
+      //   else{
+      //     console.log(err)
+      //   }
+     // });
+    }
+  };
+
   render(){
 
+
+
     if(this.state.val){
-      return <Cameraccess read_command = {this.read} />
+      return (
+        <View style={styles.container2}>
+          <RNCamera
+            ref={ref => {
+              this.camera = ref;
+            }}
+            style={styles.preview}
+            type={RNCamera.Constants.Type.back}
+            flashMode={RNCamera.Constants.FlashMode.on}
+            androidCameraPermissionOptions={{
+              title: 'Permission to use camera',
+              message: 'We need your permission to use your camera',
+              buttonPositive: 'Ok',
+              buttonNegative: 'Cancel',
+            }}
+          />
+          <View style={{ flex: 0, flexDirection: 'row', justifyContent: 'center' }}>
+            <TouchableOpacity onPress={this.takePicture.bind(this)} style={styles.capture}>
+              <Text style={{ fontSize: 14 }}> SNAP </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      );
     }
+
+
+
     else{
         const activeTabStyle = { borderBottomWidth: 6, borderColor: '#009688' }
         return (
@@ -522,6 +570,26 @@ export default class App extends Component{
       backgroundColor: '#7B1FA2',
       borderRadius: 2,
       elevation: 2
-    }
+    },
+
+    container2: {
+      flex: 1,
+      flexDirection: 'column',
+      backgroundColor: 'black',
+    },
+    preview: {
+      flex: 1,
+      justifyContent: 'flex-end',
+      alignItems: 'center',
+    },
+    capture: {
+      flex: 0,
+      backgroundColor: '#fff',
+      borderRadius: 5,
+      padding: 15,
+      paddingHorizontal: 20,
+      alignSelf: 'center',
+      margin: 20,
+    },
   })
   
