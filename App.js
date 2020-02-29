@@ -1,5 +1,9 @@
 import React, { Component, Fragment } from 'react';
 import { RNCamera } from 'react-native-camera';
+import CameraRoll from "@react-native-community/cameraroll";
+import Icon from "react-native-vector-icons/FontAwesome";
+
+const myIcon = (<Icon name = "long-arrow-left" size={50} style="light" />);
 
 
 import {
@@ -16,20 +20,27 @@ import {
   Modal,
   ActivityIndicator,
   Image,
-  CameraRoll
+  PermissionsAndroid,
+  BackHandler ,
+  Alert,
+  RefreshControl
+
 } from 'react-native'
 import BluetoothSerial from 'react-native-bluetooth-serial'
 import Toast from 'react-native-tiny-toast'
-import Cameraccess from './cameracontrol'
+//import Cameraccess from './cameracontrol'
 
 const Button = ({ title, onPress, style, textStyle }) =>
   <TouchableOpacity style={[ styles.button, style ]} onPress={onPress}>
     <Text style={[ styles.buttonText, textStyle ]}>{title.toUpperCase()}</Text>
   </TouchableOpacity>
 
-const DeviceList = ({ devices, connectedId, showConnectedIcon, onDevicePress }) =>
-<ScrollView style={styles.container}>
+const DeviceList = ({ devices, connectedId, showConnectedIcon, onDevicePress,_refreshControl }) =>
+<ScrollView 
+refreshControl={_refreshControl()}
+style={styles.container} >
   <View style={styles.listContainer}>
+    
     {devices.map((device, i) => {
       return (
         <TouchableHighlight
@@ -64,6 +75,7 @@ export default class App extends Component{
 
     this.read = this.read.bind(this);
     this.state = {
+      photos : [],
       isEnabled: false,
       discovering: false,
       devices: [],
@@ -71,6 +83,7 @@ export default class App extends Component{
       connected: false,
       section: 0,
       val : false,
+      refreshing:false
     }
   }
 
@@ -79,6 +92,34 @@ export default class App extends Component{
     this.setState(previousState => (
       { val: !previousState.val }
     ))  
+  }
+
+  componentDidMount(){
+    (async function requestStoragePermission() 
+    {
+      try {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
+          {
+            'title': 'Access Request',
+            'message': 'AI-Magination require your location access Permissionss'
+          }
+        )
+        if (granted === PermissionsAndroid.RESULTS.GRANTED) {
+          console.log("You can use the location")
+        } else {
+          console.log("location permission denied")
+          alert("Location permission denied");
+        }
+      } catch (err) {
+        console.warn(err)
+      }
+    })();
+  }
+
+  componentDidUpdate(prevProps) {
+    // Typical usage (don't forget to compare props):
+    console.log(typeof(this._refreshControl))
   }
 
   UNSAFE_componentWillMount () {
@@ -92,16 +133,14 @@ export default class App extends Component{
       this.setState({ isEnabled, devices })
     })
 
+    BackHandler.addEventListener('hardwareBackPress', this.onBackPress);
+
     BluetoothSerial.on('bluetoothEnabled', () => console.log('Bluetooth enabled'))
     BluetoothSerial.on('bluetoothDisabled', () => console.log('Bluetooth disabled'))
     BluetoothSerial.on('read', (data) => {
        if(this.state.val){
          this.takePicture();
        }
-      console.log('DSata Received from LINUX',data.data);
-      // this.read();
-      // console.log(`DATA FROM BLUETOOTH: ${data.data}`);
-      // Toast.show(data.data);
    })
     BluetoothSerial.on('error', (err) => console.log(`Error: ${err.message}`))
     BluetoothSerial.on('connectionLost', () => {
@@ -110,11 +149,62 @@ export default class App extends Component{
       }
       this.setState({ connected: false })
     })
-  });
-
- 
+  }); 
   }
 
+  componentWillUnmount(){
+    BackHandler.removeEventListener('hardwareBackPress', this.onBackPress);
+  }
+
+  _refreshControl=()=>{
+    return (
+      <RefreshControl
+      refreshing={this.state.refreshing}
+        onRefresh={()=>this._refreshListView()} />
+    )
+  }
+
+  _refreshListView(){
+    //Start Rendering Spinner
+    this.setState({refreshing:true})
+    //Updating the dataSource with new data
+   
+    if(this.state.isEnabled){
+      BluetoothSerial.list()
+    .then((values) => {
+      this.setState({ devices:values })  
+    })
+    }
+    else
+    this.setState({devices:[],unpairedDevices:[]})
+
+    this.setState({refreshing:false}) //Stop Rendering Spinner
+  }
+
+
+  onBackPress = () => {
+ 
+    //Code to display alert message when use click on android device back button.
+    Alert.alert(
+      null,
+      ' Do you want to exit From App ?',
+      [
+        { text: 'Yes', onPress: () =>{ 
+
+          if(this.state.val)
+          this.setState({val:false})
+          else
+          BackHandler.exitApp();
+      
+      } },
+        { text: 'No', onPress: () => console.log('NO Pressed') }
+      ],
+      { cancelable: false },
+    );
+ 
+    // Return true to enable back button over ride.
+    return true;
+  }
  
 
   /**
@@ -126,7 +216,7 @@ export default class App extends Component{
     BluetoothSerial.requestEnable()
     .then((res) => this.setState({ isEnabled: true }))
     .then(()=>{
-      this.photosession();
+      this.photosession();   /************ NEED TO CHECK THIS FUNCTION CALL */
     })
     .catch((err) => Toast.show(err.message))
 
@@ -159,6 +249,7 @@ export default class App extends Component{
   toggleBluetooth (value) {
     if (value === true) {
       this.enable()
+      
     } else {
       this.disable()
     }
@@ -318,10 +409,20 @@ export default class App extends Component{
 
   takePicture = async() => {
     if (this.camera) {
-      const options = { quality: 0.5 };
+      const options = { quality: 0.5,base64: true };
       const data = await this.camera.takePictureAsync(options);
       console.log('taken picture: ',data.uri);
-      CameraRoll.saveToCameraRoll(data.uri)
+      CameraRoll.saveToCameraRoll(data.uri).
+      then(CameraRoll.getPhotos({
+        first: 1,
+        assetType: 'Photos',
+      })
+      .then(r => {
+        this.setState({ photos: r.edges });
+      })
+      .catch((err) => {
+         console.log(err)
+      }));
       // CameraRoll.saveToCameraRoll(data.uri).then((res,err)=>{
       //   if(!err){
       //     console.log('picture has been saved ', res)
@@ -354,11 +455,7 @@ export default class App extends Component{
               buttonNegative: 'Cancel',
             }}
           />
-          <View style={{ flex: 0, flexDirection: 'row', justifyContent: 'center' }}>
-            <TouchableOpacity onPress={this.takePicture.bind(this)} style={styles.capture}>
-              <Text style={{ fontSize: 14 }}> SNAP </Text>
-            </TouchableOpacity>
-          </View>
+         
         </View>
       );
     }
@@ -371,11 +468,12 @@ export default class App extends Component{
           <View style={{ flex: 1 }}>
             <View style={styles.topBar}>
               <Text style={styles.heading}>AiMagenation</Text>
+              
               {Platform.OS === 'android'
               ? (
                 <View style={styles.enableInfoWrapper}>
                   <Text style={{ fontSize: 12, color: '#FFFFFF' }}>
-                    {this.state.isEnabled ? 'disable' : 'enable'}
+                    {this.state.isEnabled ? 'disable Bluetooth' : 'enable Bluetooth'}
                   </Text>
                   <Switch
                     onValueChange={this.toggleBluetooth.bind(this)}
@@ -400,57 +498,65 @@ export default class App extends Component{
 
             ) : null}
 
-            {
+            {/* {
               this.state.isEnabled==false && this.state.section==0
               ?(
+                <View>
+                 
                 <Text style={{textAlign:'center', paddingTop:'50%'}}>Please Enabel Bluetooth to see paired Devices</Text>
+                
+                </View>
+              ):null} */}
+
+            {/* {
+              this.state.isEnabled==true && this.state.section==0 && this.state.devices.length==0
+              ?(
+                <Text style={{textAlign:'center', paddingTop:'50%'}}>You did not pair any device</Text>
               ):null}
 
             {
               this.state.isEnabled==false && this.state.section==1 && this.state.discovering == false
               ?(
-                <Text style={{textAlign:'center', paddingTop:'50%'}}>Please Enabel Bluetooth to and then scan </Text>
+                <Text style={{textAlign:'center', paddingTop:'50%'}}>Please Enabel Bluetooth </Text>
               ):null}
+ */}
 
             {this.state.discovering && this.state.section === 1 && this.state.isEnabled==true
             ? (
                 <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-                  
-                <ActivityIndicator
-                  style={{ marginBottom: 15 }}
-                  size={60} />
-                  
-                <Button
-                  textStyle={{ color: '#FFFFFF' }}
-                  style={styles.buttonRaised}
-                  title='Cancel Discovery'
-                  onPress={() => this.cancelDiscovery()} />
-               
-               
+                    
+                  <ActivityIndicator
+                    style={{ marginBottom: 15 }}
+                    size={60} />
+                    
+                  <Button
+                    textStyle={{ color: '#FFFFFF' }}
+                    style={styles.buttonRaised}
+                    title='Cancel Discovery'
+                    onPress={() => this.cancelDiscovery()} />
+                
+                
 
-              </View>
+                </View>
             ) : (
 
               <Fragment>
-
-
-              <DeviceList
-                showConnectedIcon={this.state.section === 0}
-                connectedId={this.state.device && this.state.device.id}
-                devices={this.state.section === 0 ? this.state.devices : this.state.unpairedDevices}
-                onDevicePress={(device) => this.onDevicePress(device)} />
-
-              <Button
-                    title='Start Photo Session'
-                    onPress={() => this.requestEnable()} />
+                <DeviceList
+                  devices={this.state.section === 0 ? this.state.devices : this.state.unpairedDevices}
+                  connectedId={this.state.device && this.state.device.id}
+                  showConnectedIcon={this.state.section === 0}
+                  onDevicePress={(device) => this.onDevicePress(device)} 
+                  
+                  _refreshControl={this._refreshControl}/>
 
                 <Button
-                    title='Send Message'
-                    onPress={() => this.write('Hello Zeeshan')} />
-              </Fragment>
+                      title='Start Photo Session'
+                      onPress={() => this.requestEnable()} />
 
-              
-             
+                  <Button
+                      title='Send Message'
+                      onPress={() => this.write('Hello Zeeshan')} />
+              </Fragment>
             )}
 
               
