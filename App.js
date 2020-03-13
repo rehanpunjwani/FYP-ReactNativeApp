@@ -2,8 +2,9 @@ import React, { Component, Fragment } from 'react';
 import { RNCamera } from 'react-native-camera';
 import CameraRoll from "@react-native-community/cameraroll";
 import Icon from "react-native-vector-icons/FontAwesome";
-
-const myIcon = (<Icon name = "long-arrow-left" size={50} style="light" />);
+import SplashScreen from './splashscreen'
+import Thankyou from './thankyou'
+const myIcon = (<Icon name = "flash" size={30} style={{color:'#ffffff'}} />);
 
 
 import {
@@ -28,7 +29,7 @@ import {
 } from 'react-native'
 import BluetoothSerial from 'react-native-bluetooth-serial'
 import Toast from 'react-native-tiny-toast'
-//import Cameraccess from './cameracontrol'
+
 
 const Button = ({ title, onPress, style, textStyle }) =>
   <TouchableOpacity style={[ styles.button, style ]} onPress={onPress}>
@@ -57,9 +58,9 @@ style={styles.container} >
                 ) : null}
               </View>
             ) : null}
-            <View style={{ justifyContent: 'space-between', flexDirection: 'row', alignItems: 'center' }}>
+            <View style={{ justifyContent: 'center', flexDirection: 'row', alignItems: 'center' }}>
               <Text style={{ fontWeight: 'bold' }}>{device.name}</Text>
-              <Text>{`<${device.id}>`}</Text>
+              {/* <Text>{`<${device.id}>`}</Text> */}
             </View>
           </View>
         </TouchableHighlight>
@@ -73,8 +74,11 @@ export default class App extends Component{
   constructor (props) {
     super(props)
 
+
     this.read = this.read.bind(this);
     this.state = {
+      galoption:false,
+      isLoading: true,
       photos : [],
       isEnabled: false,
       discovering: false,
@@ -85,6 +89,7 @@ export default class App extends Component{
       val : false,
       refreshing:false
     }
+    let x = <SplashScreen />
   }
 
    photosession =()=>{
@@ -94,7 +99,14 @@ export default class App extends Component{
     ))  
   }
 
-  componentDidMount(){
+  async componentDidMount(){
+    console.disableYellowBox = true;
+    const data = await this.performTimeConsumingTask();
+
+  if (data !== null) {
+    this.setState({ isLoading: false });
+  }
+
     (async function requestStoragePermission() 
     {
       try {
@@ -115,6 +127,7 @@ export default class App extends Component{
         console.warn(err)
       }
     })();
+
   }
 
   componentDidUpdate(prevProps) {
@@ -184,26 +197,61 @@ export default class App extends Component{
 
   onBackPress = () => {
  
-    //Code to display alert message when use click on android device back button.
-    Alert.alert(
-      null,
-      ' Do you want to exit From App ?',
-      [
-        { text: 'Yes', onPress: () =>{ 
+    if(this.state.val){
+      Alert.alert(
+        null,
+        ' Do you want to exit Photo Session ?',
+        [
+          { text: 'Yes', onPress: () =>{ 
+  
+            if(this.state.val){
+              this.disconnect();
+              
+              this.setState({val:false});
+              
+              
+            }
+            
+            else
+            BackHandler.exitApp();
+        
+        } },
+          { text: 'No', onPress: () => console.log('NO Pressed') }
+        ],
+        { cancelable: false },
+      );
+    }
+    else{
+      Alert.alert(
+        null,
+        ' Do you want to exit From App ?',
+        [
+          { text: 'Yes', onPress: () =>{ 
+  
+            if(this.state.val)
+            this.setState({val:false})
+            else
+            BackHandler.exitApp();
+        
+        } },
+          { text: 'No', onPress: () => console.log('NO Pressed') }
+        ],
+        { cancelable: false },
+      );
+    }
 
-          if(this.state.val)
-          this.setState({val:false})
-          else
-          BackHandler.exitApp();
-      
-      } },
-        { text: 'No', onPress: () => console.log('NO Pressed') }
-      ],
-      { cancelable: false },
-    );
  
     // Return true to enable back button over ride.
     return true;
+  }
+
+  performTimeConsumingTask = async() => {
+    return new Promise((resolve) =>
+      setTimeout(
+        () => { resolve('result') },
+        2000
+      )
+    );
   }
  
 
@@ -216,6 +264,7 @@ export default class App extends Component{
     BluetoothSerial.requestEnable()
     .then((res) => this.setState({ isEnabled: true }))
     .then(()=>{
+      this.write('start');
       this.photosession();   /************ NEED TO CHECK THIS FUNCTION CALL */
     })
     .catch((err) => Toast.show(err.message))
@@ -249,9 +298,12 @@ export default class App extends Component{
   toggleBluetooth (value) {
     if (value === true) {
       this.enable()
+      this.setState({value:true});
+
       
     } else {
       this.disable()
+      this.setState({value:false});
     }
   }
 
@@ -313,14 +365,29 @@ export default class App extends Component{
    * @param  {Object} device
    */
   connect (device) {
+    
     this.setState({ connecting: true })
+    // if(this.state.connecting){
+      
+    // }
+    
     console.log('this is device id ',device.id)
+    
     BluetoothSerial.connect(device.id)
     .then((res) => {
-      Toast.show(`Connected to device ${device.name}`)
+      Toast.hide()
+      
+      Toast.showSuccess(`Connected to device ${device.name}`)
+      Toast.show
+      
+      
       this.setState({ device, connected: true, connecting: false })
     })
-    .catch((err) => Toast.show(err.message))
+    .catch((err) =>{
+      Toast.hide();
+       Toast.show(err.message);
+      });
+    
   }
 
   /**
@@ -328,7 +395,11 @@ export default class App extends Component{
    */
   disconnect () {
     BluetoothSerial.disconnect()
-    .then(() => this.setState({ connected: false }))
+    .then(() =>{
+      Toast.hide();
+      Toast.showSuccess("Disconnected")
+      this.setState({ connected: false })
+    } )
     .catch((err) => Toast.show(err.message))
   }
 
@@ -340,6 +411,8 @@ export default class App extends Component{
     if (value === true && this.state.device) {
       this.connect(this.state.device)
     } else {
+      console.log('disconneting')
+      Toast.showLoading('Disconnecting...')
       this.disconnect()
     }
   }
@@ -376,9 +449,18 @@ export default class App extends Component{
   onDevicePress (device) {
     console.log(device)
     console.log(this.state.section)
-    if (this.state.section === 0) {
+    if (this.state.section === 0 && !this.state.connected) {
+      Toast.showLoading('Connecting...');
       this.connect(device)
-    } else {
+      
+      
+    } 
+    else if (this.state.connected){
+      console.log('hello');
+      Toast.showLoading('Disconnecting...');
+      this.disconnect();
+    }
+    else {
       this.pairDevice(device)
     }
   }
@@ -435,27 +517,35 @@ export default class App extends Component{
   };
 
   render(){
+    if(this.state.galoption){
+      return<Thankyou />
+    }
+
+    if (this.state.isLoading) {
+      return <SplashScreen />;
+    }
 
 
 
     if(this.state.val){
       return (
         <View style={styles.container2}>
+         
           <RNCamera
             ref={ref => {
               this.camera = ref;
             }}
             style={styles.preview}
             type={RNCamera.Constants.Type.back}
-            flashMode={RNCamera.Constants.FlashMode.on}
+            // flashMode={RNCamera.Constants.FlashMode.on}
+            playSoundOnCapture={true}
             androidCameraPermissionOptions={{
               title: 'Permission to use camera',
               message: 'We need your permission to use your camera',
               buttonPositive: 'Ok',
               buttonNegative: 'Cancel',
             }}
-          />
-         
+          />   
         </View>
       );
     }
@@ -489,11 +579,9 @@ export default class App extends Component{
                   <Text style={{ fontSize: 14, color: '#FFFFFF' }}>PAIRED DEVICES</Text>
                   
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.tab, this.state.section === 1 && activeTabStyle]} onPress={() => this.setState({ section: 1 })}>
+                {/* <TouchableOpacity style={[styles.tab, this.state.section === 1 && activeTabStyle]} onPress={() => this.setState({ section: 1 })}>
                   <Text style={{ fontSize: 14, color: '#FFFFFF' }}>UNPAIRED DEVICES</Text>
-                </TouchableOpacity>
-
-                
+                </TouchableOpacity> */} 
               </View>
 
             ) : null}
@@ -552,10 +640,6 @@ export default class App extends Component{
                 <Button
                       title='Start Photo Session'
                       onPress={() => this.requestEnable()} />
-
-                  <Button
-                      title='Send Message'
-                      onPress={() => this.write('Hello Zeeshan')} />
               </Fragment>
             )}
 
@@ -572,12 +656,12 @@ export default class App extends Component{
                     title={this.state.discovering ? '... Discovering' : 'Discover devices'}
                     onPress={this.discoverUnpaired.bind(this)} />
                 ) : null}
-                {Platform.OS === 'android' && !this.state.isEnabled
+                {/* {Platform.OS === 'android' && !this.state.isEnabled
                 ? (
-                  <Button
-                    title='Start Photo Session'
-                    onPress={() => this.requestEnable()} />
-                ) : null}
+                  // <Button
+                  //   title='Start Photo Session'
+                  //   onPress={() => this.requestEnable()} />
+                ) : null} */}
               </ScrollView>
   
             </View>
@@ -598,7 +682,7 @@ export default class App extends Component{
   const styles = StyleSheet.create({
     container: {
       flex: 0.9,
-      backgroundColor: '#F5FCFF'
+      //backgroundColor: '#00BCD4'
     },
     topBar: { 
       height: 56, 
@@ -642,7 +726,7 @@ export default class App extends Component{
       color: '#238923'
     },
     listContainer: {
-      borderColor: '#ccc',
+      borderColor: '#009688',
       borderTopWidth: 0.5
     },
     listItem: {
